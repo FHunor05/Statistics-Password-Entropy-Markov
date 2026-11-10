@@ -4,6 +4,10 @@ import string
 from collections import defaultdict, Counter
 from typing import List, Dict, Tuple
 
+import numpy as np
+from scipy.stats import entropy as scipy_entropy
+import matplotlib.pyplot as plt
+
 
 # Szabványos, 94 elemű jelszó-ábécé definiálása
 KISBETUK = string.ascii_lowercase       # 26 db: a-z
@@ -15,12 +19,8 @@ TELJES_ABECE = KISBETUK + NAGYBETUK + SZAMOK + SPECIALIS  # Összesen: 94 karakt
 
 def megfelel_a_szabalynak(jelszo: str) -> bool:
     """
-    Ellenőrzi, hogy a jelszó megfelel-e az ajánlott jelszószabálynak:
-    - Hossz: 6 és 18 karakter között (6 <= hossz <= 18)
-    - Legalább 1 kisbetűs karakter (a-z)
-    - Legalább 1 nagybetűs karakter (A-Z)
-    - Legalább 1 számjegy (0-9)
-    - Speciális karakter: opcionális
+    Ellenőrzi a jelszószabályt: 6-18 karakter, min. 1 kisbetű, 1 nagybetű, 1 szám.
+    A speciális karakter opcionális.
     """
     if not (6 <= len(jelszo) <= 18):
         return False
@@ -31,11 +31,7 @@ def megfelel_a_szabalynak(jelszo: str) -> bool:
 
 
 def szabalyossag_kikenyszeritese(jelszo: str) -> str:
-    """
-    Átalakítja a jelszójelöltet úgy, hogy garantáltan teljesítse a
-    6-18 karakteres hosszt, valamint a min. 1 kisbetű, 1 nagybetű és 1 szám szabályt.
-    """
-    # 1. Hossz beállítása (6 és 18 karakter közé)
+    """Garantálja a 6-18 karakteres hosszt, min. 1 kisbetűt, 1 nagybetűt és 1 számot."""
     while len(jelszo) < 6:
         jelszo += random.choice(SZAMOK)
     if len(jelszo) > 18:
@@ -43,7 +39,6 @@ def szabalyossag_kikenyszeritese(jelszo: str) -> str:
 
     karakter_lista = list(jelszo)
 
-    # 2. Kötelező karaktertípusok (kisbetű, nagybetű, szám) ellenőrzése és pótlása
     if not any(c in KISBETUK for c in karakter_lista):
         karakter_lista[-3] = random.choice(KISBETUK)
 
@@ -57,8 +52,6 @@ def szabalyossag_kikenyszeritese(jelszo: str) -> str:
     if not any(c in SZAMOK for c in karakter_lista):
         karakter_lista[-1] = random.choice(SZAMOK)
 
-    # Biztonsági ellenőrzés: a három különböző végső pozíció (-3, -2, -1)
-    # garantálja, hogy egyik pótlás se írja felül a másikat
     if not any(c in KISBETUK for c in karakter_lista):
         karakter_lista[-3] = random.choice(KISBETUK)
     if not any(c in NAGYBETUK for c in karakter_lista):
@@ -69,12 +62,16 @@ def szabalyossag_kikenyszeritese(jelszo: str) -> str:
     return "".join(karakter_lista)
 
 
-def general_jelszo_minta(elemszam: int = 5000, seed: int = 42) -> List[str]:
+def general_jelszo_minta(
+    elemszam: int = 5000,
+    szotari_arany: float = 0.70,
+    osszetett_arany: float = 0.20,
+    seed: int = 42
+) -> List[str]:
     """
-    Saját, valósághű jelszó-adatbázis generálása, amely:
-    - Garantálja a 6-18 karakteres hosszt, min. 1 kisbetűt, 1 nagybetűt és 1 számot.
-    - A speciális karaktereket opcionálisan kezeli, de garantálja mind a 94
-      szabványos karakter előfordulását az adatbázisban.
+    Paraméterezhető jelszó-adatbázis generátor.
+    A szotari_arany és osszetett_arany paraméterekkel mérhető, hogyan hat
+    az emberi kiszámíthatóság aránya a Markov-entrópiára.
     """
     random.seed(seed)
 
@@ -88,29 +85,24 @@ def general_jelszo_minta(elemszam: int = 5000, seed: int = 42) -> List[str]:
 
     minta = []
 
-    # 1. LÉPÉS: Garantáljuk, hogy a 94 karakter mindegyike (beleértve a 32
-    # speciális karaktert is) bekerüljön az adatbázisba szabályos jelszavakban.
+    # 1. Mind a 94 karakter garantált elhelyezése az adatbázisban
     karakter_index = 0
-    while karakter_index < len(TELJES_ABECE):
+    while karakter_index < len(TELJES_ABECE) and len(minta) < elemszam:
         kotelezo_szelet = TELJES_ABECE[karakter_index:karakter_index + 4]
         karakter_index += 4
         extra_hossz = random.randint(2, 8)
         extra = "".join(random.choice(TELJES_ABECE) for _ in range(extra_hossz))
         nyers_jelszo = (
-            kotelezo_szelet
-            + extra
-            + random.choice(KISBETUK)
-            + random.choice(NAGYBETUK)
-            + random.choice(SZAMOK)
+            kotelezo_szelet + extra
+            + random.choice(KISBETUK) + random.choice(NAGYBETUK) + random.choice(SZAMOK)
         )
         minta.append(szabalyossag_kikenyszeritese(nyers_jelszo))
 
-    # 2. LÉPÉS: A fennmaradó jelszavak generálása (opcionális speciális karakterekkel)
+    # 2. Fennmaradó jelszavak generálása a megadott arányok szerint
     while len(minta) < elemszam:
         valasztas = random.random()
 
-        if valasztas < 0.70:
-            # 70%: Szótári alapú jelszó + számutótag + opcionális speciális karakter (50% eséllyel)
+        if valasztas < szotari_arany:
             alap = random.choice(szotar_alapok)
             if random.random() < 0.6:
                 alap = alap.capitalize()
@@ -118,8 +110,7 @@ def general_jelszo_minta(elemszam: int = 5000, seed: int = 42) -> List[str]:
             spec = random.choice(SPECIALIS) if random.random() < 0.5 else ""
             nyers_jelszo = alap + utotag + spec
 
-        elif valasztas < 0.90:
-            # 20%: Két szótöredék + szám + opcionális speciális karakter (50% eséllyel)
+        elif valasztas < (szotari_arany + osszetett_arany):
             szo1 = random.choice(szotar_alapok)[:4].capitalize()
             szo2 = random.choice(szotar_alapok)[:4]
             spec = random.choice(SPECIALIS) if random.random() < 0.5 else ""
@@ -127,24 +118,19 @@ def general_jelszo_minta(elemszam: int = 5000, seed: int = 42) -> List[str]:
             nyers_jelszo = f"{szo1}{spec}{szo2}{szam}"
 
         else:
-            # 10%: Véletlenszerű jelszó (fele speciális karakterrel, fele csak alfanumerikus)
             hossz = random.randint(6, 18)
-            if random.random() < 0.5:
-                keszlet = TELJES_ABECE
-            else:
-                keszlet = KISBETUK + NAGYBETUK + SZAMOK
+            keszlet = TELJES_ABECE if random.random() < 0.5 else (KISBETUK + NAGYBETUK + SZAMOK)
             nyers_jelszo = "".join(random.choice(keszlet) for _ in range(hossz))
 
-        szabalyos_jelszo = szabalyossag_kikenyszeritese(nyers_jelszo)
-        minta.append(szabalyos_jelszo)
+        minta.append(szabalyossag_kikenyszeritese(nyers_jelszo))
 
     return minta
 
 
 class JelszoMarkovModell:
     """
-    Elsőrendű Markov-lánc modell jelszavak karakterátmeneteinek és
-    entrópiájának vizsgálatára.
+    Elsőrendű Markov-lánc modell NumPy átmeneti mátrixszal és
+    SciPy alapú entrópia-számítással.
     """
     def __init__(self, simitas_alpha: float = 0.0):
         self.alpha = simitas_alpha
@@ -155,15 +141,18 @@ class JelszoMarkovModell:
         self.abeceszam: int = 0
         self.tanitott: bool = False
 
+        # NumPy mátrixhoz tartozó indexelés
+        self.karakter_lista: List[str] = list(TELJES_ABECE)
+        self.kar_index: Dict[str, int] = {k: i for i, k in enumerate(self.karakter_lista)}
+        self.atmeneti_matrix_np: np.ndarray = np.zeros((len(TELJES_ABECE), len(TELJES_ABECE)))
+
     def tanitas(self, jelszavak: List[str]) -> None:
-        """
-        A jelszó-adatbázis elemzése: karaktergyakoriságok és
-        bigram (c_i -> c_{i+1}) átmenetek megszámlálása.
-        """
+        """Felépíti a gyakorisági szótárakat és a 94x94-es NumPy átmeneti mátrixot."""
+        nyers_matrix = np.zeros((len(TELJES_ABECE), len(TELJES_ABECE)), dtype=np.float64)
+
         for jelszo in jelszavak:
             if not jelszo:
                 continue
-
             self.kezdo_szamlalo[jelszo[0]] += 1
 
             for i, kar in enumerate(jelszo):
@@ -171,34 +160,31 @@ class JelszoMarkovModell:
                 self.osszes_karakter += 1
 
                 if i < len(jelszo) - 1:
-                    kovetkezo_kar = jelszo[i + 1]
-                    self.atmenet_szamlalo[kar][kovetkezo_kar] += 1
+                    kov_kar = jelszo[i + 1]
+                    self.atmenet_szamlalo[kar][kov_kar] += 1
+                    if kar in self.kar_index and kov_kar in self.kar_index:
+                        nyers_matrix[self.kar_index[kar], self.kar_index[kov_kar]] += 1.0
 
         self.abeceszam = len(self.karakter_szamlalo)
+
+        # Soronkénti normálás NumPy-jal (feltételes valószínűségi mátrix P_ij)
+        if self.alpha > 0:
+            nyers_matrix += self.alpha
+        sor_osszegek = nyers_matrix.sum(axis=1, keepdims=True)
+        self.atmeneti_matrix_np = np.divide(
+            nyers_matrix, sor_osszegek, out=np.zeros_like(nyers_matrix), where=sor_osszegek != 0
+        )
         self.tanitott = True
 
     def felteteles_valoszinuseg(self, aktualis_kar: str, kovetkezo_kar: str) -> float:
-        """
-        Kiszámítja a P(X_{t+1} = kovetkezo_kar | X_t = aktualis_kar)
-        feltételes valószínűséget.
-        """
+        """Lekérdezi a P(X_{t+1} = kovetkezo_kar | X_t = aktualis_kar) értéket a NumPy mátrixból."""
         if not self.tanitott:
-            raise RuntimeError("A modellt először tanítani kell a .tanitas() metódussal!")
-
-        kovetkezo_darab = self.atmenet_szamlalo[aktualis_kar][kovetkezo_kar]
-        osszes_kimeno = sum(self.atmenet_szamlalo[aktualis_kar].values())
-
-        if osszes_kimeno == 0:
-            return 0.0
-
-        szamlalo = kovetkezo_darab + self.alpha
-        nevezo = osszes_kimeno + (self.alpha * self.abeceszam)
-        return szamlalo / nevezo
+            raise RuntimeError("A modellt először tanítani kell!")
+        if aktualis_kar in self.kar_index and kovetkezo_kar in self.kar_index:
+            return float(self.atmeneti_matrix_np[self.kar_index[aktualis_kar], self.kar_index[kovetkezo_kar]])
+        return 0.0
 
     def top_kovetkezo_karakterek(self, aktualis_kar: str, top_n: int = 5) -> List[Tuple[str, float, int]]:
-        """
-        Visszaadja az adott karaktert leggyakrabban követő karaktereket.
-        """
         eredmenyek = []
         for kov_kar, db in self.atmenet_szamlalo[aktualis_kar].most_common(top_n):
             p = self.felteteles_valoszinuseg(aktualis_kar, kov_kar)
@@ -206,12 +192,6 @@ class JelszoMarkovModell:
         return eredmenyek
 
     def jelszo_valoszinusege_es_entropiaja(self, jelszo: str) -> Tuple[float, float, float]:
-        """
-        Kiszámítja egy konkrét jelszó:
-        1. Markov-lánc szerinti együttes valószínűségét: P(w)
-        2. Markov-alapú entrópiáját (bitben): -log2(P(w))
-        3. Naiv brute-force entrópiáját (bitben): L * log2(N)
-        """
         if not jelszo:
             return 0.0, 0.0, 0.0
 
@@ -233,14 +213,12 @@ class JelszoMarkovModell:
 
     def korpusz_entropia_rata(self) -> Tuple[float, float]:
         """
-        Kiszámítja az adatbázisra jellemző:
-        - Elsőrendű Shannon-entrópiát: H(X)
-        - Markov-lánc feltételes entrópiáját: H(X_{t+1} | X_t)
+        Kiszámítja az elsőrendű Shannon-entrópiát H(X) és a Markov feltételes
+        entrópiát H(X_{t+1} | X_t) a scipy.stats.entropy függvény segítségével (base=2).
         """
-        h_shannon = 0.0
-        for kar, db in self.karakter_szamlalo.items():
-            p_x = db / self.osszes_karakter
-            h_shannon -= p_x * math.log2(p_x)
+        gyakorisagok = np.array(list(self.karakter_szamlalo.values()), dtype=np.float64)
+        p_x_eloszlas = gyakorisagok / np.sum(gyakorisagok)
+        h_shannon = float(scipy_entropy(p_x_eloszlas, base=2))
 
         h_markov = 0.0
         osszes_atmenet = sum(sum(c.values()) for c in self.atmenet_szamlalo.values())
@@ -250,24 +228,121 @@ class JelszoMarkovModell:
             if kimeno_db == 0:
                 continue
             p_x = kimeno_db / osszes_atmenet
-
-            h_y_adott_x = 0.0
-            for kov_kar, db in kovetkezo_dict.items():
-                p_y_adott_x = db / kimeno_db
-                h_y_adott_x -= p_y_adott_x * math.log2(p_y_adott_x)
-
+            sor_valoszinusegek = np.array(list(kovetkezo_dict.values()), dtype=np.float64) / kimeno_db
+            h_y_adott_x = float(scipy_entropy(sor_valoszinusegek, base=2))
             h_markov += p_x * h_y_adott_x
 
         return h_shannon, h_markov
 
 
+def abrak_es_meresek_generalasa(alap_modell: JelszoMarkovModell) -> None:
+    """
+    Saját paraméterezett mérések futtatása és 3 db publikációs minőségű
+    Matplotlib ábra mentése a PDF dokumentációhoz.
+    """
+    plt.rcParams["figure.dpi"] = 150
+
+    # --- 1. ÁBRA: Az 'a' karaktert követő Top 10 karakter feltételes valószínűsége ---
+    top10_a = alap_modell.top_kovetkezo_karakterek('a', top_n=10)
+    karakterek = [elem[0] for elem in top10_a]
+    valoszinusegek = [elem[1] * 100 for elem in top10_a]
+    egyenletes_szint = (1.0 / alap_modell.abeceszam) * 100
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    oszlopok = ax.bar(karakterek, valoszinusegek, color="#2b5c8f", edgecolor="black", alpha=0.85)
+    oszlopok[0].set_color("#d95f02")  # 'b' karakter kiemelése
+    ax.axhline(egyenletes_szint, color="red", linestyle="--", linewidth=1.5,
+               label=f"Egyenletes eloszlás (1/94 = {egyenletes_szint:.2f}%)")
+
+    ax.set_title("Az 'a' karaktert követő Top 10 karakter feltételes valószínűsége P(X_{t+1} | X_t='a')", fontsize=11, fontweight="bold")
+    ax.set_xlabel("Következő karakter (X_{t+1})", fontsize=10)
+    ax.set_ylabel("Feltételes valószínűség (%)", fontsize=10)
+    ax.legend()
+    ax.grid(axis="y", linestyle=":", alpha=0.6)
+
+    for oszlop, ertek in zip(oszlopok, valoszinusegek):
+        ax.text(oszlop.get_x() + oszlop.get_width() / 2, oszlop.get_height() + 0.4,
+                f"{ertek:.1f}%", ha="center", va="bottom", fontsize=8, fontweight="bold")
+
+    plt.tight_layout()
+    plt.savefig("1_a_kovetkezo_karakterek.png")
+    plt.close()
+
+    # --- 2. ÁBRA: Markov-átmeneti mátrix hőtérkép (Top 15 leggyakoribb karakterre) ---
+    top15_kar = [k for k, _ in alap_modell.karakter_szamlalo.most_common(15)]
+    top15_idx = [alap_modell.kar_index[k] for k in top15_kar]
+    resz_matrix = alap_modell.atmeneti_matrix_np[np.ix_(top15_idx, top15_idx)]
+
+    fig, ax = plt.subplots(figsize=(8, 6.5))
+    im = ax.imshow(resz_matrix, cmap="YlGnBu", interpolation="nearest")
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Feltételes valószínűség P(oszlop | sor)", fontsize=9)
+
+    ax.set_xticks(np.arange(len(top15_kar)))
+    ax.set_yticks(np.arange(len(top15_kar)))
+    ax.set_xticklabels(top15_kar, fontsize=9, fontweight="bold")
+    ax.set_yticklabels(top15_kar, fontsize=9, fontweight="bold")
+    ax.set_xlabel("Következő karakter (X_{t+1})", fontsize=10)
+    ax.set_ylabel("Aktuális karakter (X_t)", fontsize=10)
+    ax.set_title("Elsőrendű Markov-átmeneti mátrix hőtérképe (Top 15 karakter)", fontsize=11, fontweight="bold")
+
+    for i in range(len(top15_kar)):
+        for j in range(len(top15_kar)):
+            ertek = resz_matrix[i, j]
+            if ertek >= 0.05:
+                szin = "white" if ertek > 0.25 else "black"
+                ax.text(j, i, f"{ertek:.2f}", ha="center", va="center", color=szin, fontsize=7)
+
+    plt.tight_layout()
+    plt.savefig("2_markov_heatmap.png")
+    plt.close()
+
+    # --- 3. ÁBRA: Paraméterezett méréssorozat (Szótári arány vs. Entrópia) ---
+    szotari_aranyok = np.linspace(0.0, 0.95, 11)
+    naiv_entropiak = []
+    shannon_entropiak = []
+    markov_entropiak = []
+
+    for arany in szotari_aranyok:
+        maradek = 1.0 - arany
+        minta_meres = general_jelszo_minta(
+            elemszam=3000, szotari_arany=float(arany), osszetett_arany=float(maradek * 0.3), seed=42
+        )
+        m_modell = JelszoMarkovModell()
+        m_modell.tanitas(minta_meres)
+        h_s, h_m = m_modell.korpusz_entropia_rata()
+
+        naiv_entropiak.append(math.log2(m_modell.abeceszam))
+        shannon_entropiak.append(h_s)
+        markov_entropiak.append(h_m)
+
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    x_szazalek = szotari_aranyok * 100
+    ax.plot(x_szazalek, naiv_entropiak, "k--", linewidth=1.8, label="Naiv entrópia: log2(94) = 6.55 bit")
+    ax.plot(x_szazalek, shannon_entropiak, "b-o", linewidth=2, label="Elsőrendű Shannon-entrópia H(X)")
+    ax.plot(x_szazalek, markov_entropiak, "r-s", linewidth=2.2, label="Markov feltételes entrópia H(X_{t+1} | X_t)")
+
+    ax.fill_between(x_szazalek, markov_entropiak, shannon_entropiak, color="red", alpha=0.12,
+                    label="Karakterfüggőségből eredő entrópiaveszteség")
+
+    ax.set_title("Paramétervizsgálat: A szótári jelszavak arányának hatása az entrópiára", fontsize=11, fontweight="bold")
+    ax.set_xlabel("Szótári alapú jelszavak aránya az adatbázisban (%)", fontsize=10)
+    ax.set_ylabel("Karakterenkénti entrópia (bit / karakter)", fontsize=10)
+    ax.set_ylim(1.0, 7.2)
+    ax.grid(True, linestyle=":", alpha=0.7)
+    ax.legend(loc="lower left", fontsize=8.5)
+
+    plt.tight_layout()
+    plt.savefig("3_parameterezett_entropia_meres.png")
+    plt.close()
+
+
 def main():
     print("=" * 72)
-    print(" 13. FELADAT: JELSZÓ-ENTRÓPIA ÉS MARKOV-LÁNC ALAPÚ MODELL")
+    print(" 13. FELADAT: JELSZÓ-ENTRÓPIA ÉS MARKOV-LÁNC ALAPÚ MODELL (NumPy/SciPy)")
     print("=" * 72)
 
-    # 1. Adatbázis előállítása, szabályok ellenőrzése és modell tanítása
-    jelszavak = general_jelszo_minta(elemszam=5000, seed=42)
+    jelszavak = general_jelszo_minta(elemszam=5000, szotari_arany=0.70, osszetett_arany=0.20, seed=42)
     modell = JelszoMarkovModell(simitas_alpha=0.0)
     modell.tanitas(jelszavak)
 
@@ -279,13 +354,9 @@ def main():
     print(f"  - Elemzett jelszavak száma          : {len(jelszavak)} db")
     print(f"  - Jelszóhossz tartomány (min - max) : {min(hosszak)} - {max(hosszak)} karakter")
     print(f"  - Szabálynak megfelelő jelszavak    : {szabalyos_db}/{len(jelszavak)} db (100.0%)")
-    print(f"    (6-18 karakter, min. 1 kisbetű, min. 1 nagybetű, min. 1 szám)")
-    print(f"  - Speciális karaktert is tartalmaz  : {spec_db}/{len(jelszavak)} db ({spec_db / len(jelszavak) * 100:.1f}% - opcionális)")
-    print(f"  - Összes elemzett karakter          : {modell.osszes_karakter} db")
-    print(f"  - Egyedi karakterek száma (Ábécé)   : {modell.abeceszam} db")
-    print(f"    (26 kisbetű + 26 nagybetű + 10 szám + 32 speciális karakter)")
+    print(f"  - Speciális karaktert is tartalmaz  : {spec_db}/{len(jelszavak)} db ({spec_db / len(jelszavak) * 100:.1f}%)")
+    print(f"  - Egyedi karakterek száma (Ábécé)   : {modell.abeceszam} db (94x94 NumPy mátrix)")
 
-    # 2. Konkrét kérdés megválaszolása: P('b' | 'a')
     p_ab = modell.felteteles_valoszinuseg('a', 'b')
     a_osszes = sum(modell.atmenet_szamlalo['a'].values())
     ab_db = modell.atmenet_szamlalo['a']['b']
@@ -295,27 +366,27 @@ def main():
     print(f"  - Ebből közvetlenül 'b' karakter következik           : {ab_db} db")
     print(f"  - P(X_{{t+1}} = 'b' | X_t = 'a') = {p_ab:.4f} ({p_ab * 100:.2f}%)")
 
-    print(f"\n[3] LEGGYAKORIBB FOLYTATÁSOK AZ 'a' KARAKTER UTÁN (TOP 5)")
-    for kov_kar, valsz, db in modell.top_kovetkezo_karakterek('a', top_n=5):
-        print(f"  - 'a' -> '{kov_kar}' : P = {valsz:.4f} ({valsz * 100:5.2f}%) | ({db} előfordulás)")
-
-    # 3. Korpusz szintű entrópia összehasonlítás
     h_shannon, h_markov = modell.korpusz_entropia_rata()
-    print(f"\n[4] KARAKTERENKÉNTI ENTRÓPIA ÖSSZEHASONLÍTÁSA")
+    print(f"\n[3] KARAKTERENKÉNTI ENTRÓPIA ÖSSZEHASONLÍTÁSA (SciPy)")
     print(f"  - Egyenletes eloszlás (log2({modell.abeceszam}))      : {math.log2(modell.abeceszam):.2f} bit/karakter")
     print(f"  - Független karakterek (Shannon H(X)) : {h_shannon:.2f} bit/karakter")
     print(f"  - Markov-lánc feltételes H(X_{{t+1}}|X_t) : {h_markov:.2f} bit/karakter")
-    print(f"  -> A karakterek közti függőség {((h_shannon - h_markov) / h_shannon) * 100:.1f}%-kal csökkenti a bizonytalanságot!")
+    print(f"  -> Entrópiacsökkenés: {((h_shannon - h_markov) / h_shannon) * 100:.1f}%")
 
-    # 4. Szabályos jelszavak feltörési nehézségének összevetése (speciális karakterrel és anélkül)
     teszt_jelszavak = ["Abrakadabra123", "Balaton2024!", "Qwerty12", "X9#q7$Z2!k8&M4"]
-    print(f"\n[5] SZABÁLYOS JELSZAVAK VALÓDI (MARKOV) VS. NAIV (BRUTE-FORCE) ENTRÓPIÁJA")
+    print(f"\n[4] SZABÁLYOS JELSZAVAK VALÓDI (MARKOV) VS. NAIV (BRUTE-FORCE) ENTRÓPIÁJA")
     print(f"  {'Jelszó':<18} | {'Hossz':<5} | {'Naiv entrópia':<15} | {'Markov entrópia':<17} | {'Log10 P(jelszó)'}")
     print("  " + "-" * 78)
     for pw in teszt_jelszavak:
         p_w, h_m, h_n = modell.jelszo_valoszinusege_es_entropiaja(pw)
         log10_p = math.log10(p_w) if p_w > 0 else float('-inf')
         print(f"  {pw:<18} | {len(pw):^5} | {h_n:>9.2f} bit  | {h_m:>11.2f} bit  | {log10_p:>10.2f}")
+
+    print(f"\n[5] PARAMÉTEREZETT MÉRÉSEK ÉS MATPLOTLIB ÁBRÁK GENERÁLÁSA...")
+    abrak_es_meresek_generalasa(modell)
+    print("  -> Elkészült: 1_a_kovetkezo_karakterek.png")
+    print("  -> Elkészült: 2_markov_heatmap.png")
+    print("  -> Elkészült: 3_parameterezett_entropia_meres.png")
 
 
 if __name__ == "__main__":

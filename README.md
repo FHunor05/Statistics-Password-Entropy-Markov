@@ -1,90 +1,57 @@
 # Jelszó-entrópia és szótáralapú feltörés valószínűségi modellje
 
-> **13. Feladat:** Elemezz egy anonimizált jelszó-adatbázist (vagy saját generált mintát)[cite: 1]. Számítsd ki a karakterek feltételes valószínűségét (Markov-lánc szemlélettel: mekkora eséllyel követi az `'a'`-t egy `'b'`)[cite: 1].
+> **13. Feladat:** Elemezz egy anonimizált jelszó-adatbázist (vagy saját generált mintát). Számítsd ki a karakterek feltételes valószínűségét (Markov-lánc szemlélettel: mekkora eséllyel követi az `'a'`-t egy `'b'`).
 
 ---
 
-## 1. Elméleti háttér és célkitűzés
+## 1. Elméleti háttér és matematikai modell
 
-A klasszikus (naiv) jelszóerősség-becslés azt feltételezi, hogy a jelszó minden egyes karakterét egymástól függetlenül, egyenletes eloszlással választják ki egy $N$ elemű ábécéből ($\Sigma$). Szabványos, nyomtatható ASCII karakterkészlet esetén ($N = 94$) egy $L$ hosszúságú jelszó brute-force entrópiája:
+A hagyományos (naiv) jelszóerősség-mérők azt feltételezik, hogy a felhasználó a jelszó minden egyes karakterét egymástól függetlenül, egyenletes valószínűséggel választja ki egy $N$ elemű ábécéből ($\Sigma$). A szabványos, 94 elemű nyomtatható ASCII karakterkészlet ($N = 94$) esetén egy $L$ hosszúságú jelszó brute-force entrópiája:
 
-$$H_{\text{naiv}} = L \cdot \log_2(94) \approx L \cdot 6{,}55 \text{ [bit]}$$
+$$H_{\text{naiv}} = L \cdot \log_2(94) \approx L \cdot 6{,}5546 \text{ [bit]}$$
 
-A gyakorlatban még az ajánlott jelszószabályok (**6–18 karakter hossz, legalább 1 kisbetű, 1 nagybetű, 1 számjegy, valamint opcionális speciális karakter**) mellett is megfigyelhető, hogy a felhasználók gyakori szótári szavakat nagybetűsítenek, és a végükre illesztenek számokat (pl. `Abrakadabra123`, `Balaton2024!`). Emiatt az egymást követő karakterek nem függetlenek: egy adott karakter megjelenése erősen függ az őt megelőző karaktertől[cite: 1].
+A gyakorlatban – még szigorú jelszóházirend (**6–18 karakter hossz, legalább 1 kisbetű, 1 nagybetű, 1 számjegy, valamint opcionális speciális karakter**) mellett is – a felhasználók természetes nyelvi szótöveket nagybetűsítenek, majd a jelszó végére évszámokat vagy gyakori számsorokat illesztenek (pl. `Abrakadabra123`, `Balaton2024!`). Emiatt az egymást követő karakterek nem függetlenek.
 
-### Elsőrendű Markov-lánc modell
-A jelszavak karakterláncát egy elsőrendű, diszkrét idejű Markov-láncként modellezzük[cite: 1], ahol a következő karakter feltételes valószínűsége csak az aktuális karaktertől függ:
+### Elsőrendű diszkrét idejű Markov-lánc
+A jelszavak karakterláncát egy elsőrendű Markov-láncként modellezzük, amelynek állapottere a 94 elemű $\Sigma$ ábécé. A Markov-tulajdonság alapján a következő karakter eloszlása csak az aktuális karaktertől függ:
 
 $$P(X_{t+1} = x_{t+1} \mid X_t = x_t, X_{t-1} = x_{t-1}, \dots, X_1 = x_1) = P(X_{t+1} = x_{t+1} \mid X_t = x_t)$$
 
-Annak a feltételes valószínűsége, hogy az `'a'` karaktert közvetlenül egy `'b'` karakter követi[cite: 1]:
+Az átmeneti valószínűségi mátrix ($\mathbf{P} \in \mathbb{R}^{94 \times 94}$) elemeit a korpuszban megfigyelt karakterpárok (bigramok) relatív gyakoriságából becsüljük (opcionális $\alpha$ Laplace-simítással):
+
+$$P_{i,j} = P(X_{t+1} = c_j \mid X_t = c_i) = \frac{N(c_i, c_j) + \alpha}{\sum_{k \in \Sigma} N(c_i, c_k) + \alpha \cdot \vert{}\Sigma\vert{}}$$
+
+Speciálisan az `'a' -> 'b'` átmenetre ($\alpha = 0$ esetén):
 
 $$P(X_{t+1} = \text{'b'} \mid X_t = \text{'a'}) = \frac{N(\text{"ab"})}{\sum_{c \in \Sigma} N(\text{"a"}c)}$$
 
-ahol $N(\text{"ab"})$ az `"ab"` karakterpár előfordulásainak száma, a nevező pedig az `'a'` karakter összes nem-szóvégi előfordulása az adatbázisban.
+### Korpusz- és jelszószintű entrópia
+Egy $w = c_1 c_2 \dots c_L$ jelszó együttes valószínűsége és Markov-alapú öninformációja (találgatási entrópiája):
 
-### Jelszó-valószínűség és Markov-entrópia
-Egy $w = c_1 c_2 \dots c_L$ jelszó együttes előfordulási valószínűsége a Markov-lánc szerint:
+$$P(w) = P(c_1) \cdot \prod_{i=1}^{L-1} P(c_{i+1} \mid c_i), \qquad H_{\text{Markov}}(w) = -\log_2 P(w) = -\log_2 P(c_1) - \sum_{i=1}^{L-1} \log_2 P(c_{i+1} \mid c_i)$$
 
-$$P(w) = P(c_1) \cdot \prod_{i=1}^{L-1} P(c_{i+1} \mid c_i)$$
+A teljes adatbázisra jellemző egy karakterre jutó átlagos bizonytalanságot az elsőrendű **Shannon-entrópia** ($H(X)$), valamint a karakterfüggőségeket is figyelembe vevő **Markov feltételes entrópia** ($H(X_{t+1} \mid X_t)$) adja meg:
 
-Az egy karakterre jutó átlagos bizonytalanságot a korpusz szintjén az elsőrendű **Shannon-entrópia** ($H(X)$), illetve a karakterfüggőségeket is figyelembe vevő **feltételes entrópia** ($H(X_{t+1} \mid X_t)$) méri:
-
-$$H(X) = -\sum_{x \in \Sigma} P(x) \log_2 P(x)$$
-
-$$H(X_{t+1} \mid X_t) = -\sum_{x \in \Sigma} P(x) \sum_{y \in \Sigma} P(y \mid x) \log_2 P(y \mid x)$$
+$$H(X) = -\sum_{x \in \Sigma} P(x) \log_2 P(x), \qquad H(X_{t+1} \mid X_t) = -\sum_{x \in \Sigma} P(x) \sum_{y \in \Sigma} P(y \mid x) \log_2 P(y \mid x)$$
 
 ---
 
-## 2. A projekt felépítése
+## 2. A projekt felépítése és technológiai stack
+
+A megoldás a `numpy`, `scipy` és `matplotlib` tudományos könyvtárakra épül:
 
 ```text
 Statistics-Password-Entropy-Markov/
 ├── .gitignore
-├── README.md          # Projektdokumentáció és eredmények
-└── jelszo_markov.py   # Adatgeneráló, szabályellenőrző és Markov-modell szkript
+├── README.md                              # Dokumentáció, elmélet és kritikus elemzés
+├── jelszo_markov.py                       # NumPy/SciPy alapú szimuláció és Markov-modell
+├── 1_a_kovetkezo_karakterek.png           # 1. ábra: P(X_{t+1} | X_t='a') eloszlás
+├── 2_markov_heatmap.png                   # 2. ábra: 15x15 Markov-átmeneti hőtérkép
+└── 3_parameterezett_entropia_meres.png    # 3. ábra: Paraméterezett entrópiamérés
 ```
 
-### Főbb komponensek (`jelszo_markov.py`)
-* **Teljes, 94 elemű karakterkészlet (`TELJES_ABECE`):**
-  * **26 angol kisbetű** (`a`–`z`)
-  * **26 angol nagybetű** (`A`–`Z`)
-  * **10 számjegy** (`0`–`9`)
-  * **32 speciális karakter** (`!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~`)
-* **Garantált jelszószabályok (`megfelel_a_szabalynak` és `szabalyossag_kikenyszeritese`):**
-  * Az adatbázis minden egyes elemére (5000/5000 db, 100%) garantált, hogy a hossza **6 és 18 karakter közé esik**, és tartalmaz **legalább 1 kisbetűt**, **legalább 1 nagybetűt**, valamint **legalább 1 számjegyet**.
-  * A **speciális karakterek használata opcionális** (a jelszavak kb. felében fordulnak elő), ugyanakkor az adatbázis egésze mind a 32 speciális karaktert lefedi.
-* **`JelszoMarkovModell` osztály:**
-  * `tanitas(jelszavak)`: $O(M)$ időkomplexitással felépíti a kezdőkarakterek eloszlását, az egyedi karakterek gyakoriságát és a ritka (sparse) átmeneti mátrixot.
-  * `felteteles_valoszinuseg(aktualis_kar, kovetkezo_kar)`: Kiszámítja a $P(X_{t+1} \mid X_t)$ átmeneti valószínűséget[cite: 1].
-  * `jelszo_valoszinusege_es_entropiaja(jelszo)`: Logaritmikus térben ($\log_2$) számítja ki egy konkrét jelszó Markov-valószínűségét és entrópiáját.
-  * `korpusz_entropia_rata()`: Kiszámítja az adatbázisra jellemző $H(X)$ és $H(X_{t+1} \mid X_t)$ értékeket.
-
----
-
-## 3. Futtatási útmutató
-
-A szkript kizárólag a Python beépített könyvtárait (`math`, `random`, `string`, `collections`, `typing`) használja.
-
-**Követelmények:** Python 3.8+
-
-```bash
-# Tároló klónozása
-git clone [https://github.com/FHunor05/Statistics-Password-Entropy-Markov.git](https://github.com/FHunor05/Statistics-Password-Entropy-Markov.git)
-cd Statistics-Password-Entropy-Markov
-
-# Szkript futtatása
-python jelszo_markov.py
-```
-
----
-
-## 4. Eredmények elemzése és következtetések
-
-1. **Jelszószabályok és a 94 karakteres ábécé lefedettsége:**
-   Az 5000 generált jelszó 100%-a teljesíti a 6–18 karakteres hosszkorlátot, valamint a kötelező kisbetűs, nagybetűs és számjegyes követelményt. A speciális karakterek opcionálisak, de a teljes mintában mind a 94 nyomtatható ASCII karakter előfordul.
-2. **Az `'a' -> 'b'` átmenet valószínűsége[cite: 1]:**
-   Ha a 94 karakter egyenletes eloszlást követne, annak az esélye, hogy az `'a'` betűt egy `'b'` követi, mindössze $1/94 \approx 1{,}06\%$ lenne. A szótári tövek (*abrakadabra*, *ablak*, *baba*, *szabadsag*, *csaba*) miatt azonban a tényleges feltételes valószínűség **$P(\text{'b'} \mid \text{'a'}) > 20\%$**, vagyis nagyságrenddel magasabb a véletlen szintnél[cite: 1].
-3. **Naiv vs. Markov-entrópia összehasonlítása:**
-   * A szabályoknak formálisan megfelelő, de szótári alapú jelszavak (mint az `Abrakadabra123` vagy a `Balaton2024!`) magas naiv brute-force entrópiával (~85–90 bit) rendelkeznek, ám a kiszámítható karakterátmenetek miatt a Markov-entrópiájuk töredékére (~18–22 bitre) esik vissza.
-   * Ezzel szemben a valóban véletlenszerű karakterláncok (`X9#q7$Z2!k8&M4`) a Markov-alapú, szótári támadásokkal szemben is megőrzik magas entrópiájukat.
+* **Saját adatgenerálás és szabálykikényszerítés (`general_jelszo_minta`):**
+  * **Ábécé ($N=94$):** 26 kisbetű (`a–z`), 26 nagybetű (`A–Z`), 10 számjegy (`0–9`) és 32 speciális karakter (`string.punctuation`).
+  * **Garantált komplexitási szabály (`megfelel_a_szabalynak`):** Minden generált jelszó hossza **6 és 18 karakter közé esik**, és kötelezően tartalmaz **legalább 1 kisbetűt, 1 nagybetűt és 1 számjegyet**, míg a speciális karakterek használata opcionális (~50%-os előfordulással).
+* **Vektorizált átmeneti mátrix és SciPy entrópia (`JelszoMarkovModell`):**
+  * A $94 \times 94$-es átmeneti
